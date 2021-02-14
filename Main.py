@@ -52,8 +52,8 @@ async def process_start_command(message: types.Message):
     await message.reply(f"Привет, {message.from_user.first_name}!\n", reply_markup=greet_kb)
     await bot.send_message(message.chat.id,
                            "Я могу перенести стиль с одной фотографии на другую. " +
-                           "Есть два варианта: либо я использую твой стиль, либо мой. " +
-                           "Что выберешь ?\n", reply_markup=choice_kb)
+                           "Есть несколько вариантов для переноса твоего стиля. " +
+                           "Приступим ?\n", reply_markup=choice_kb)
     userInfo[message.chat.id] = Settings()
 
 
@@ -67,7 +67,6 @@ async def get_example(message):
 
 
 choice_kb = InlineKeyboardMarkup()
-choice_kb.add(InlineKeyboardButton("Использовать стиль бота", callback_data='vangogh'))
 choice_kb.add(InlineKeyboardButton("Использовать свой стиль", callback_data='my'))
 
 
@@ -151,20 +150,6 @@ async def twice_style(callback_query):
 
 
 
-# vangogh
-@mb.callback_query_handler(lambda c: c.data == 'vangogh')
-async def vangogh(callback_query):
-    await bot.answer_callback_query(callback_query.id)
-
-    await callback_query.message.edit_text("Я применю к твоей фотографии стиль ван Гога")
-    await callback_query.message.edit_reply_markup(reply_markup=settings_kb)
-
-    if callback_query.from_user.id not in userInfo:
-        userInfo[callback_query.from_user.id] = Settings()
-
-    userInfo[callback_query.from_user.id].st_type = 'vangogh'
-
-
 
 # standard settings
 @mb.callback_query_handler(lambda c: c.data == 'standard')
@@ -186,11 +171,6 @@ async def standard_set(callback_query):
                                                "Хорошо, теперь пришли мне картинку для первого стиля ")
         userInfo[callback_query.from_user.id].need_photos = 3
 
-    elif userInfo[callback_query.from_user.id].st_type == 'vangogh':
-        await callback_query.message.edit_text(
-                                               "Пришли мне картинку, и я добавлю на нее стиль ван Гога ")
-        userInfo[callback_query.from_user.id].need_photos = 1
-
     userInfo[callback_query.from_user.id].set_standard_settings()
 
 
@@ -201,8 +181,7 @@ async def high_set(callback_query):
 
     if userInfo[callback_query.from_user.id].st_type == 'single':
         await callback_query.message.edit_text(
-            "Пришли мне картинку, стиль с которой нужно перенести. " +
-            "Очень настоятельно рекомендую для хорошего качества присылать изображение как документ.")
+            "Пришли мне картинку, стиль с которой нужно перенести. ")
         userInfo[callback_query.from_user.id].need_photos = 2
 
     elif userInfo[callback_query.from_user.id].st_type == 'twice':
@@ -214,12 +193,6 @@ async def high_set(callback_query):
         await callback_query.message.edit_text(
             "Хорошо, теперь пришли мне картинку для первого стиля. ")
         userInfo[callback_query.from_user.id].need_photos = 3
-
-    elif userInfo[callback_query.from_user.id].st_type == 'vangogh':
-        await callback_query.message.edit_text(
-            "Пришли мне фотографию, и я добавлю на нее стиль Ван Гога. ")
-        userInfo[callback_query.from_user.id].need_photos = 1
-
     userInfo[callback_query.from_user.id].set_high_settings()
 
 
@@ -250,7 +223,6 @@ async def get_image(message):
             await bot.send_photo(message.chat.id, output)
 
 
-
     # double style transfer
     elif userInfo[message.chat.id].st_type == 'twice':
         if userInfo[message.chat.id].need_photos == 3:
@@ -268,8 +240,6 @@ async def get_image(message):
             output = await style_transfer(TwiceStyleTransfer, userInfo[message.chat.id],
                                               *userInfo[message.chat.id].photos)
             await bot.send_photo(message.chat.id, output)
-
-
 
     # union style transfer
     elif userInfo[message.chat.id].st_type == 'universe':
@@ -292,14 +262,6 @@ async def get_image(message):
                                               *userInfo[message.chat.id].photos)
             await bot.send_photo(message.chat.id, output)
 
-    # GAN
-    elif userInfo[message.chat.id].st_type == 'vangogh':
-        if userInfo[message.chat.id].need_photos == 1:
-            await bot.send_message(message.chat.id, "Запускаю процесс переноса стиля")
-            output = gan_transfer(userInfo[message.chat.id],
-                              userInfo[message.chat.id].photos[0])
-            await bot.send_photo(message.chat.id, output)
-
 
 
 async def style_transfer(st_class, user, *imgs):
@@ -308,17 +270,6 @@ async def style_transfer(st_class, user, *imgs):
                   style_weight=100000, content_weight=1)
     output = await st.transfer()
     return tensorimg(output)
-
-
-
-def gan_transfer(user, img):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    imsize = user.settings['imsize']
-    model = torch.load('nets/vangogh.pth').to(device)
-    img = image_loader(img, imsize, device)
-    for f in model.parameters():
-        f.requires_grad = False
-    return tensorimg(model(img).add(1).div(2))
 
 
 def image_loader(image_name, imsize, device):
